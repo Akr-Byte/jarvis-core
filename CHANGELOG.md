@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.18.0
+
+### Performance
+
+- **CORE-12**: `InferenceClient` now reuses persistent HTTP(S) connections
+  instead of opening a fresh TCP+TLS handshake for every request. The new
+  dependency-free `jarvis_core.http_keepalive.KeepAliveOpener` keeps a small
+  pool (4 idle per host) of validated `http.client` connections: a pooled
+  connection is reused only when the previous response was fully drained and
+  the server has not half-closed it (non-blocking MSG_PEEK stale detection,
+  as in urllib3). A reused connection that still dies with
+  `RemoteDisconnected`/`BadStatusLine` before the server could read the
+  request is retried exactly once on a fresh connection. Responses expose the
+  full `urlopen` surface (`read`, SSE line iteration, `headers.get`,
+  context-manager), HTTP >= 400 still raises `urllib.error.HTTPError`, and
+  transport failures surface as `URLError` — so retry, error-mapping and
+  stream behavior are unchanged. Injected openers keep working; set
+  `INFERENCE_KEEPALIVE=0` to restore per-request connections.
+- `InferenceClient.close()` releases pooled connections; stateless openers
+  ignore it.
+
+### Tests
+
+- `tests/test_http_keepalive.py`: connection reuse, partially-consumed SSE
+  stream discards the connection, `will_close` responses are not reused,
+  HTTPError paths skip reuse, stale idle detection, one-time reuse-race
+  retry, pool bounding + `close()`, and an end-to-end test proving a real
+  HTTP/1.1 server sees one connection across four requests.
+
 ## 0.17.4
 
 ### Reliability
