@@ -18,6 +18,8 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from .http_keepalive import KeepAliveOpener, default_opener
+
 DEFAULT_TIMEOUT_SECONDS = 120.0
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 MAX_ERROR_BYTES = 16 * 1024
@@ -136,9 +138,18 @@ class InferenceClient:
     transport and generation timeouts are never replayed.
     """
 
-    def __init__(self, config: InferenceConfig, *, opener=urlopen) -> None:
+    def __init__(self, config: InferenceConfig, *, opener=None) -> None:
         self.config = config
-        self._opener = opener
+        # CORE-12: default to persistent connections instead of a fresh
+        # TCP/TLS handshake per request. Injecting an opener keeps the old
+        # per-request `urlopen` behavior (tests and custom transports).
+        self._opener = opener if opener is not None else default_opener()
+
+    def close(self) -> None:
+        """Release pooled keep-alive connections (no-op for stateless openers)."""
+        close = getattr(self._opener, "close", None)
+        if close is not None:
+            close()
 
     def _queue_retry_delay(self, error: InferenceClientError) -> float:
         """Return the bounded delay before the next queue-admission retry.
