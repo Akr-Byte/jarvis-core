@@ -6,13 +6,59 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-`jarvis-agent-core` is a small, typed, dependency-free Python library for building portable AI-agent runtimes. It provides reusable contracts and deterministic runtime primitives without requiring a particular model vendor, application, database, deployment platform, user interface or operating-system sandbox.
+`jarvis-agent-core` is a small, typed, dependency-free Python library for building portable
+AI-agent runtimes. It provides reusable contracts and deterministic runtime primitives without
+requiring a particular model vendor, application, database, deployment platform, user interface or
+operating-system sandbox.
 
-The package is designed to be useful **standalone**. Any Python application can install it, implement the provider protocol, and reuse the shared runtime contracts.
+The package is designed to be useful **standalone**. Any Python application can install it, implement
+the provider protocol, and reuse the shared runtime contracts.
+
+## Table of contents
+
+- [Overview](#overview)
+- [Install](#install)
+- [Quick start](#quick-start)
+- [Shared inference client](#shared-inference-client)
+- [Token-efficient runtime](#token-efficient-runtime)
+- [What Core provides](#what-core-provides)
+- [What Core deliberately does not do](#what-core-deliberately-does-not-do)
+- [Common agent brain boundary](#common-agent-brain-boundary)
+- [Provider-neutral model boundary](#provider-neutral-model-boundary)
+- [Release and compatibility](#release-and-compatibility)
+- [Development checks](#development-checks)
+- [Contributing](#contributing)
+- [Security](#security)
+- [Support](#support)
+- [License](#license)
+
+## Overview
+
+Core centralizes the parts of an agent runtime that should be shared rather than re-implemented:
+
+- model requests, responses, usage and tool calls;
+- provider capability and routing primitives;
+- cost-aware local/cheap/frontier routing and empirical route calibration;
+- agent capabilities and approval decisions;
+- portable sandbox requirements and consumer-owned sandbox executor contracts;
+- token accounting, budgets and context compaction;
+- artifacts and content-addressed references;
+- evidence, verification and completion requirements;
+- failure classification, recovery and retry policy;
+- multi-agent tasks, teams and orchestration;
+- instructions, memory and MCP permission vocabulary;
+- schedules, remote-run and execution-state contracts;
+- leases, permissions and execution-proof records;
+- repository/developer-intelligence primitives;
+- evaluation cases, benchmarks and tracing;
+- review/change transactions and verification policy;
+- reusable sandbox policy and host-boundary validation.
 
 ## Install
 
-Python 3.10+ is required. The current release is **0.18.0**, which adds persistent HTTP(S) connections via `InferenceClient` keepalive support, and hardens ledger reservation cleanup, bounds retry sleeps with a total deadline, and decodes OpenAI JSON-string tool-call arguments. Publish this version only after the release workflow completes.
+Python 3.10+ is required. The current release is **0.18.0**, which adds persistent HTTP(S) connections
+via `InferenceClient` keepalive support, and hardens ledger reservation cleanup, bounds retry sleeps with
+a total deadline, and decodes OpenAI JSON-string tool-call arguments.
 
 ```bash
 python -m pip install "jarvis-agent-core==0.18.0"
@@ -27,9 +73,9 @@ python -m pip install -e . -r requirements-dev.txt
 python -m pytest
 ```
 
-## Shared inference client (0.18.0)
+## Quick start
 
-Both the Jarvis CLI and AI Stack use the Core inference client rather than implementing gateway configuration and protocol handling independently. Core provides a dependency-free `InferenceConfig` and `InferenceClient` for bearer authentication, model discovery, capability negotiation, chat completions, SSE streaming, embeddings, request IDs, and normalized transport errors. Applications retain ownership of their agent loops, tools, approvals, persistence, cancellation policy, and telemetry.
+Any Python application can embed the shared runtime contracts without pulling in a vendor SDK:
 
 ```python
 from jarvis_core import InferenceClient
@@ -42,21 +88,66 @@ response = client.complete(
 )
 ```
 
-Set `INFERENCE_BASE_URL=http://inference-host:8080/v1` and `INFERENCE_API_KEY` for the gateway. `JARVIS_BASE_URL` and `JARVIS_API_KEY` remain supported as compatibility fallbacks. Core retries only explicit pre-admission `QUEUE_TIMEOUT` / `QUEUE_FULL` rejections, using `Retry-After` plus jitter; ambiguous generation/transport timeouts and failures after streaming starts are never replayed. Structured SSE error frames are surfaced as `InferenceClientError` instead of being returned as successful model events. `INFERENCE_QUEUE_RETRIES` defaults to `1` (maximum `3`), and `INFERENCE_QUEUE_RETRY_BACKOFF_SECONDS` defaults to `0.5`.
-## 0.16.2 highlights
+Set `INFERENCE_BASE_URL=http://inference-host:8080/v1` and `INFERENCE_API_KEY` for the gateway.
+`JARVIS_BASE_URL` and `JARVIS_API_KEY` remain supported as compatibility fallbacks.
 
-The 0.16.2 release adds the cost-aware local-first routing layer and keeps the previous empirical calibration and token-efficiency primitives intact:
+## Shared inference client
 
-- **Cost-aware tier routing** chooses between local, cheap-cloud and frontier tiers using deterministic task signals.
-- **Bounded escalation** prevents repeated failures from creating unbounded model retries and escalates only after the configured tier budget is exhausted.
-- **Cheapest eligible model selection** allows consumers to select the least expensive enabled model within a tier using estimated input, cached-input and output costs.
-- **Verification-aware decisions** mark security-sensitive or elevated-risk work for downstream verification.
-- **Provider-neutral design** keeps concrete provider SDKs, credentials, pricing configuration and model execution outside Core.
-- **Black formatting compliance** keeps the new routing implementation and tests aligned with the repository's CI formatter.
+Both the Jarvis CLI and AI Stack use the Core inference client rather than implementing gateway
+configuration and protocol handling independently. Core provides a dependency-free `InferenceConfig`
+and `InferenceClient` for bearer authentication, model discovery, capability negotiation, chat
+completions, SSE streaming, embeddings, request IDs, and normalized transport errors. Applications
+retain ownership of their agent loops, tools, approvals, persistence, cancellation policy, and
+telemetry.
+
+```python
+from jarvis_core import InferenceClient
+
+client = InferenceClient.from_env(user_agent="my-agent/1.0")
+models = client.list_models()
+response = client.complete(
+    model="qwen3:1.7b",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+```
+
+Core retries only explicit pre-admission `QUEUE_TIMEOUT` / `QUEUE_FULL` rejections, using
+`Retry-After` plus jitter; ambiguous generation/transport timeouts and failures after streaming starts
+are never replayed. Structured SSE error frames are surfaced as `InferenceClientError` instead of
+being returned as successful model events. `INFERENCE_QUEUE_RETRIES` defaults to `1` (maximum `3`), and
+`INFERENCE_QUEUE_RETRY_BACKOFF_SECONDS` defaults to `0.5`.
+
+## Token-efficient runtime
+
+Core provides provider-neutral primitives for bounded context construction, token/cost estimation,
+route budgets, adaptive routing and empirical route calibration.
+
+Context construction can prioritize required task state, recent tool evidence and relevant files under
+an explicit budget. Route decisions can account for estimated token cost, latency, risk and measured
+task outcomes.
+
+### Release highlights
+
+#### 0.16.2
+
+The 0.16.2 release adds the cost-aware local-first routing layer and keeps the previous empirical
+calibration and token-efficiency primitives intact:
+
+- **Cost-aware tier routing** chooses between local, cheap-cloud and frontier tiers using deterministic
+  task signals.
+- **Bounded escalation** prevents repeated failures from creating unbounded model retries and escalates
+  only after the configured tier budget is exhausted.
+- **Cheapest eligible model selection** allows consumers to select the least expensive enabled model
+  within a tier using estimated input, cached-input and output costs.
+- **Verification-aware decisions** mark security-sensitive or elevated-risk work for downstream
+  verification.
+- **Provider-neutral design** keeps concrete provider SDKs, credentials, pricing configuration and model
+  execution outside Core.
 
 ### Cost-aware routing ownership
 
-Core owns the reusable routing policy; applications map the abstract tiers to concrete providers and models:
+Core owns the reusable routing policy; applications map the abstract tiers to concrete providers and
+models:
 
 ```text
 Deterministic tools
@@ -72,37 +163,45 @@ Deterministic tools
        │
        │ bounded failures / high risk
        ▼
- FRONTIER tier
+  FRONTIER tier
 ```
 
 - **Core:** routing signals, tier decisions, failure budgets and cost-aware model selection.
-- **AI Stack:** provider execution, concrete model configuration, pricing data, telemetry and persistence.
+- **AI Stack:** provider execution, concrete model configuration, pricing data, telemetry and
+  persistence.
 - **Jarvis:** CLI behavior, workload definitions, user approvals and task-level evaluation.
 
-The intended default for a constrained personal server is local-first execution. Cloud tiers remain opt-in and should only be configured when a stronger model is needed.
+The intended default for a constrained personal server is local-first execution. Cloud tiers remain
+opt-in and should only be configured when a stronger model is needed.
+
+### 0.16.0
 
 The 0.16.0 release added provider-neutral empirical route calibration:
 
-- **Empirical route observations** capture quality, correctness, latency, token usage, cost, tool failures, cache usage, source and timestamp.
+- **Empirical route observations** capture quality, correctness, latency, token usage, cost, tool
+  failures, cache usage, source and timestamp.
 - **Recency-weighted scoring** gives recent production evidence more influence than stale observations.
-- **Conservative routing safeguards** require a minimum sample count and configurable quality floor before measured evidence can change route selection.
+- **Conservative routing safeguards** require a minimum sample count and configurable quality floor
+  before measured evidence can change route selection.
 - **Reusable utility scoring** balances quality and reliability with latency, cost and tool failures.
-- **Backward-compatible observations** allow existing consumers to continue loading older route evidence.
+- **Backward-compatible observations** allow existing consumers to continue loading older route
+  evidence.
 
-The 0.15.0 release added provider-neutral primitives for making agent execution more token-efficient and predictable:
+### 0.15.0
+
+The 0.15.0 release added provider-neutral primitives for making agent execution more token-efficient
+and predictable:
 
 - **Context budgets** for bounded prompt/context construction.
 - **Deterministic context compilation** so relevant context can be selected and ordered consistently.
-- **Agent state ledgers** for compact, structured execution state instead of repeatedly replaying large histories.
+- **Agent state ledgers** for compact, structured execution state instead of repeatedly replaying large
+  histories.
 - **Token estimation and usage/cost accounting** for requests and accumulated model usage.
-- **Route budgets and adaptive routing** so applications can choose an appropriate model based on remaining budget and task signals.
-- **Failure and command/file state recording** for compact runtime bookkeeping.
+- **Route budgets and adaptive routing** so applications can choose an appropriate model based on
+  remaining budget and task signals.
 
-These primitives are intentionally provider-neutral. Anthropic, Ollama, Hugging Face, LiteLLM and other provider integrations remain responsibilities of the consuming application. Provider-specific caching metadata, SDK behavior, credentials and transport logic do not belong in Core.
-
-A typical application can use the primitives to keep the agent loop efficient: retrieve only relevant repository context, keep stable state structured and compact, use lightweight/local models for simple work, escalate to stronger models when task signals justify it, and rely on deterministic tools and verification rather than spending model tokens on work the runtime can perform directly.
-
-See [CHANGELOG.md](CHANGELOG.md) for the complete release history.
+These primitives are intentionally provider-neutral. Anthropic, Ollama, Hugging Face, LiteLLM and
+other provider integrations remain responsibilities of the consuming application.
 
 ## What Core provides
 
@@ -126,16 +225,6 @@ Core contains provider-neutral building blocks for:
 - review/change transactions and verification policy;
 - reusable sandbox policy and host-boundary validation.
 
-## Common agent brain boundary
-
-Core owns the **meaning** of agent execution: model contracts, tool vocabulary, capabilities, approval semantics, evidence, verification, execution state and portable isolation requirements. Applications own the actual execution adapters.
-
-The Core boundary is deliberately implementation-neutral. A CLI can implement a sandbox with native OS primitives, while a server can implement the same requirements with containers or another isolated worker. Both consume the same policy semantics.
-
-## Provider-neutral model boundary
-
-Core defines the model boundary and does not ship vendor SDKs. The shared InferenceClient owns the common Jarvis inference-gateway HTTP contract; applications may keep provider SDKs and vendor-specific transports, credential lifecycle, cancellation policy, telemetry and task-specific error handling at their own boundary.
-
 ## What Core deliberately does not do
 
 Core does not:
@@ -152,16 +241,36 @@ Core does not:
 
 This boundary keeps the package portable and safe to embed in different applications.
 
-## Compatibility and release policy
+## Common agent brain boundary
+
+Core owns the **meaning** of agent execution: model contracts, tool vocabulary, capabilities,
+approval semantics, evidence, verification, execution state and portable isolation requirements.
+Applications own the actual execution adapters.
+
+The Core boundary is deliberately implementation-neutral. A CLI can implement a sandbox with native OS
+primitives, while a server can implement the same requirements with containers or another isolated
+worker. Both consume the same policy semantics.
+
+## Provider-neutral model boundary
+
+Core defines the model boundary and does not ship vendor SDKs. The shared `InferenceClient` owns the
+common Jarvis inference-gateway HTTP contract; applications may keep provider SDKs and vendor-specific
+transports, credential lifecycle, cancellation policy, telemetry and task-specific error handling at
+their own boundary.
+
+## Release and compatibility
 
 - semantic versioning is used while the pre-1.0 API stabilizes;
 - patch releases should remain compatible within a minor line;
 - breaking public contracts require a new minor version while the API remains pre-1.0;
 - releases are immutable once published;
 - PyPI publication uses GitHub Actions Trusted Publishing;
-- the package README is the PyPI project description, so documentation changes intended for PyPI require a new package version;
-- every release-worthy change must update `pyproject.toml`, `CHANGELOG.md`, `README.md` when applicable, and relevant `docs/` files in the same PR;
-- CI enforces that the package version, changelog entry and README current-release/install version stay synchronized.
+- the package README is the PyPI project description, so documentation changes intended for PyPI
+  require a new package version;
+- every release-worthy change must update `pyproject.toml`, `CHANGELOG.md`, `README.md` when applicable,
+  and relevant `docs/` files in the same PR;
+- CI enforces that the package version, changelog entry and README current-release/install version stay
+  synchronized.
 
 ### Release flow
 
@@ -179,7 +288,8 @@ code/docs change
     -> PyPI Trusted Publishing
 ```
 
-Consumers should depend on a published PyPI version rather than a mutable Git branch. During local development, an editable checkout may be used explicitly.
+Consumers should depend on a published PyPI version rather than a mutable Git branch. During local
+development, an editable checkout may be used explicitly.
 
 ## Development checks
 
@@ -187,12 +297,34 @@ Consumers should depend on a published PyPI version rather than a mutable Git br
 python scripts/check_release_consistency.py
 black --check src tests scripts
 ruff check src tests scripts --select E9,F63,F7,F82
+mypy src
 pytest -q --cov=jarvis_core --cov-report=term-missing --cov-fail-under=85
 python -m build
 python -m twine check dist/*
 ```
 
 See [docs/contract-boundaries.md](docs/contract-boundaries.md), [docs/cost-aware-routing.md](docs/cost-aware-routing.md), [docs/empirical-calibration.md](docs/empirical-calibration.md), [docs/releasing.md](docs/releasing.md), [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md) and [SECURITY.md](SECURITY.md).
+
+## Contributing
+
+Contributions of bug reports, documentation, tests, and code are welcome. Please search existing
+issues and pull requests first, and open an issue for large API or behavioral changes. Keep Core
+provider-neutral and dependency-free at runtime, and do not move product-specific tools, storage,
+credentials, or policy into Core.
+
+Before opening a pull request, run the [development checks](#development-checks) above, including the
+release-metadata consistency check for any release-worthy change.
+
+## Security
+
+Security fixes are provided for the latest released minor version. Do not open a public issue for a
+suspected vulnerability; use GitHub's **Report a vulnerability** flow in the Security tab of this
+repository. See [SECURITY.md](SECURITY.md) for supported versions and the private reporting process.
+
+## Support
+
+Use GitHub Discussions for questions and design discussion, and GitHub Issues for reproducible bugs
+and focused feature requests. See [SUPPORT.md](SUPPORT.md) for what to include in a good issue report.
 
 ## License
 
