@@ -118,3 +118,39 @@ def test_hierarchical_instructions_memory_and_attachment_budget(tmp_path):
     assert AttachmentDescriptor.budget(
         [AttachmentDescriptor("x.pdf", "application/pdf", 100, 25)]
     ) == {"files": 1, "bytes": 100, "estimated_tokens": 25}
+
+
+def test_idempotency_ledger_is_thread_safe_per_key():
+    """Two threads racing on one key must execute the side effect once (0.18.1)."""
+    import threading
+
+    ledger = IdempotencyLedger()
+    calls = []
+    barrier = threading.Barrier(2)
+
+    def worker():
+        barrier.wait()
+        return ledger.execute("same-key", lambda: calls.append(1) or "result")
+
+    results = []
+    threads = [
+        threading.Thread(target=lambda: results.append(worker())) for _ in range(2)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert calls == [1]
+    assert results == ["result", "result"]
+
+
+def test_provider_pool_propagates_keyboard_interrupt():
+    """Process-control exceptions must not be masked as provider failures (0.18.1)."""
+    pool = ProviderPool(["only"], name=str)
+
+    def interrupt(_provider):
+        raise KeyboardInterrupt()
+
+    with pytest.raises(KeyboardInterrupt):
+        pool.call(interrupt)

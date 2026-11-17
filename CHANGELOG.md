@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.18.1
+
+### Fixed
+
+- **CORE-15**: `InferenceClient._http_error` now parses the OpenAI-compatible
+  error envelope `{"error": {"code": ..., "message": ...}}` in addition to the
+  legacy FastAPI `{"detail": ...}` shape. Against the jarvis-inference gateway
+  (which emits the OpenAI shape), `error_code` was previously always `None`,
+  so `QUEUE_TIMEOUT`/`QUEUE_FULL` queue-admission retries never fired.
+- **CORE-16**: token accounting is now robust against misbehaving provider
+  usage reports. Negative or non-numeric provider fields are sanitized to
+  zero, an all-zero usage mapping is treated as absent so the caller's
+  estimate fallback applies instead of recording zero tokens, cached input
+  tokens are clamped to the input total, and a completed provider call is no
+  longer discarded when post-call accounting fails (the estimated usage that
+  the reservation validated is committed instead).
+- **CORE-17**: `normalize_tool_call` treats the JSON literal `null` arguments
+  string (emitted by several local OpenAI-compatible runtimes) as an empty
+  argument mapping instead of raising `TypeError` and discarding the tool
+  call.
+- **CORE-18**: `IdempotencyLedger` is now thread-safe: the completed/in-flight
+  check-then-add runs under a re-entrant lock, so two threads racing on the
+  same key execute the side effect exactly once. `ProviderPool` mutations are
+  lock-protected and it no longer converts `KeyboardInterrupt`/`SystemExit`
+  into `RuntimeError("all configured providers failed")`.
+
 ## 0.18.0
 
 ### Performance

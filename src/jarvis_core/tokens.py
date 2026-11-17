@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 import json
+import logging
 from threading import RLock
 from typing import Callable, Mapping
 from uuid import uuid4
+
+_logger = logging.getLogger(__name__)
 
 
 class BudgetExceeded(RuntimeError):
@@ -164,17 +167,34 @@ class TokenLedger:
     def usage_from_provider(
         agent: str, model: str, usage: Mapping[str, int] | None
     ) -> Usage | None:
-        """Normalize common OpenAI/Hugging Face usage field names."""
+        """Normalize common OpenAI/Hugging Face usage field names.
+
+        Provider-reported values are sanitized (negative or non-numeric
+        fields clamp to zero) and an all-zero mapping is treated as absent so
+        callers fall back to their own estimate instead of recording zero
+        tokens for a real prompt (0.18.1).
+        """
         if not usage:
+            return None
+
+        def _count(key: str, fallback_key: str) -> int:
+            raw = usage.get(key, usage.get(fallback_key, 0))
+            try:
+                return max(0, int(raw))
+            except (TypeError, ValueError):
+                return 0
+
+        input_tokens = _count("input_tokens", "prompt_tokens")
+        output_tokens = _count("output_tokens", "completion_tokens")
+        cached_input_tokens = _count("cached_input_tokens", "cached_input_tokens")
+        if input_tokens == 0 and output_tokens == 0:
             return None
         return Usage(
             agent=agent,
             model=model,
-            input_tokens=int(usage.get("input_tokens", usage.get("prompt_tokens", 0))),
-            cached_input_tokens=int(usage.get("cached_input_tokens", 0)),
-            output_tokens=int(
-                usage.get("output_tokens", usage.get("completion_tokens", 0))
-            ),
+            input_tokens=input_tokens,
+            cached_input_tokens=min(cached_input_tokens, input_tokens),
+            output_tokens=output_tokens,
         )
 
     def call(
@@ -192,14 +212,41 @@ class TokenLedger:
         try:
             response = invoke()
             provider_usage = extract_usage(response) if extract_usage else None
-            usage = self.usage_from_provider(agent, model, provider_usage) or Usage(
-                agent=agent,
-                model=model,
-                input_tokens=input_tokens,
-                output_tokens=estimate_tokens(response),
-            )
-            self.commit(reservation, usage)
-            return response
+            try:
+                usage = self.usage_from_provider(agent, model, provider_usage) or Usage(
+                    agent=agent,
+                    model=model,
+                    input_tokens=input_tokens,
+                    output_tokens=estimate_tokens(response),
+                )
+                self.commit(reservation, usage)
+                return response
+            except (BudgetExceeded, TypeError, ValueError) as exc:
+                # The provider call already succeeded; accounting failures
+                # (e.g. honestly over-budget usage) must not discard the
+                # response. Fall back to the estimated usage that the
+                # reservation already validated (0.18.1).
+                _logger.warning(
+                    "usage accounting failed after a successful provider call "
+                    "(%s); recording the estimated usage instead",
+                    exc,
+                )
+                # A failed commit restores the reservation, so it is still
+                # valid for the estimate-based retry below.
+                try:
+                    self.commit(
+                        reservation,
+                        Usage(
+                            agent=agent,
+                            model=model,
+                            input_tokens=input_tokens,
+                            output_tokens=estimate_tokens(response),
+                        ),
+                    )
+                except (BudgetExceeded, TypeError, ValueError):
+                    with self._lock:
+                        self._reservations.pop(reservation.id, None)
+                return response
         except BaseException:
             # Extraction or validation can fail after the provider returns. Never
             # leave that failed call consuming reserved capacity.

@@ -425,7 +425,15 @@ class InferenceClient:
         try:
             decoded = json.loads(detail)
             if isinstance(decoded, dict):
-                payload = decoded.get("detail", decoded)
+                # Gateways disagree on the error envelope: the OpenAI
+                # compatible shape is {"error": {...}} while FastAPI's default
+                # is {"detail": ...}. Accept both so queue-admission retries
+                # keep working against either backend (0.18.1).
+                payload = decoded.get("detail")
+                if not isinstance(payload, dict):
+                    payload = decoded.get("error")
+                if not isinstance(payload, dict):
+                    payload = decoded
                 if isinstance(payload, dict):
                     error_code = payload.get("code")
                     message = str(payload.get("message") or detail)

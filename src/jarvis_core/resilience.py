@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from threading import RLock
 from time import monotonic
 from typing import Callable, Generic, TypeVar
 
@@ -65,34 +66,42 @@ class ProviderPool(Generic[T]):
     providers: list[T]
     name: Callable[[T], str]
     health: dict[str, ProviderHealth] = field(default_factory=dict)
+    _lock: RLock = field(default_factory=RLock, init=False, repr=False)
 
     def ordered(self) -> list[T]:
-        available = [
-            provider
-            for provider in self.providers
-            if self.health.setdefault(
-                self.name(provider), ProviderHealth(self.name(provider))
-            ).state
-            is not CircuitState.OPEN
-        ]
-        return sorted(
-            available,
-            key=lambda item: self.health[self.name(item)].score,
-            reverse=True,
-        )
+        with self._lock:
+            available = [
+                provider
+                for provider in self.providers
+                if self.health.setdefault(
+                    self.name(provider), ProviderHealth(self.name(provider))
+                ).state
+                is not CircuitState.OPEN
+            ]
+            return sorted(
+                available,
+                key=lambda item: self.health[self.name(item)].score,
+                reverse=True,
+            )
 
     def call(self, invoke: Callable[[T], T]) -> T:
+        # Process-control exceptions are never provider failures: converting
+        # KeyboardInterrupt/SystemExit into "all providers failed" masked real
+        # shutdown (0.18.1).
         errors: list[BaseException] = []
         for provider in self.ordered():
             started = monotonic()
-            health = self.health[self.name(provider)]
+            with self._lock:
+                health = self.health[self.name(provider)]
             try:
                 result = invoke(provider)
-            except BaseException as exc:
-                health.record_failure()
+            except Exception as exc:
+                with self._lock:
+                    health.record_failure()
                 errors.append(exc)
                 continue
-            health.record_success((monotonic() - started) * 1000)
+            with self._lock:
+                health.record_success((monotonic() - started) * 1000)
             return result
         if errors:
             raise RuntimeError("all configured providers failed") from errors[-1]
@@ -101,20 +110,27 @@ class ProviderPool(Generic[T]):
 
 @dataclass
 class IdempotencyLedger:
-    """Caches completed tool results so retries never repeat side effects."""
+    """Caches completed tool results so retries never repeat side effects.
+
+    The ledger is thread-safe (0.18.1): the completed/in-flight check-then-add
+    is now performed under a re-entrant lock, so two threads racing on the
+    same key execute the side effect exactly once.
+    """
 
     completed: dict[str, object] = field(default_factory=dict)
     in_flight: set[str] = field(default_factory=set)
+    _lock: RLock = field(default_factory=RLock, init=False, repr=False)
 
     def execute(self, key: str, operation: Callable[[], T]) -> T:
-        if key in self.completed:
-            return self.completed[key]  # type: ignore[return-value]
-        if key in self.in_flight:
-            raise RuntimeError(f"operation is already in flight: {key}")
-        self.in_flight.add(key)
-        try:
-            result = operation()
-            self.completed[key] = result
-            return result
-        finally:
-            self.in_flight.discard(key)
+        with self._lock:
+            if key in self.completed:
+                return self.completed[key]  # type: ignore[return-value]
+            if key in self.in_flight:
+                raise RuntimeError(f"operation is already in flight: {key}")
+            self.in_flight.add(key)
+            try:
+                result = operation()
+                self.completed[key] = result
+                return result
+            finally:
+                self.in_flight.discard(key)

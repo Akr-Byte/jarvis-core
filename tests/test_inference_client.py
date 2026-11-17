@@ -515,3 +515,58 @@ def test_options_cannot_override_the_model():
 
     with pytest.raises(TypeError):
         client.embeddings(model="embed-1", inputs="hello", **{"model": "other"})
+
+
+def test_openai_error_envelope_triggers_queue_retry(monkeypatch):
+    """The gateway's {"error": {...}} envelope must drive queue retries (0.18.1)."""
+    calls = []
+    sleeps = []
+
+    def opener(request, timeout):
+        calls.append(request)
+        if len(calls) == 1:
+            raise HTTPError(
+                request.full_url,
+                429,
+                "queue timeout",
+                {"X-Request-ID": "req-openai", "Retry-After": "0"},
+                io.BytesIO(
+                    b'{"error":{"code":"QUEUE_TIMEOUT","message":"busy","retryable":true}}'
+                ),
+            )
+        return FakeResponse(b'{"choices":[{"message":{"content":"ok"}}]}')
+
+    monkeypatch.setattr("jarvis_core.inference_client.time.sleep", sleeps.append)
+    monkeypatch.setattr("jarvis_core.inference_client.random.uniform", lambda _a, _b: 0)
+    client = InferenceClient(InferenceConfig("http://inference/v1"), opener=opener)
+
+    result = client.complete(
+        model="qwen3:1.7b",
+        messages=[{"role": "user", "content": "hello"}],
+    )
+
+    assert len(calls) == 2
+    assert result["choices"][0]["message"]["content"] == "ok"
+
+
+def test_openai_error_envelope_is_parsed_without_retry():
+    def opener(request, timeout):
+        raise HTTPError(
+            request.full_url,
+            503,
+            "backend down",
+            {"X-Request-ID": "req-1"},
+            io.BytesIO(b'{"error":{"code":"BACKEND_ERROR","message":"boom"}}'),
+        )
+
+    client = InferenceClient(InferenceConfig("http://inference/v1"), opener=opener)
+
+    with pytest.raises(InferenceClientError) as caught:
+        client.complete(
+            model="qwen3:1.7b",
+            messages=[{"role": "user", "content": "hello"}],
+        )
+
+    assert caught.value.error_code == "BACKEND_ERROR"
+    assert "boom" in str(caught.value)
+    assert caught.value.request_id == "req-1"
