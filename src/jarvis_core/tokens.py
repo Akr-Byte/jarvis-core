@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+from typing import Any, Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from threading import RLock
-from typing import Callable, Mapping
 from uuid import uuid4
 
 _logger = logging.getLogger(__name__)
