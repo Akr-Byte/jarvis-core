@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import threading
+
 from dataclasses import dataclass, field
 from enum import Enum
-from threading import RLock
+from threading import RLock, Lock
 from time import monotonic
 from typing import Callable, Generic, TypeVar
 
@@ -27,38 +29,43 @@ class ProviderHealth:
     consecutive_failures: int = 0
     latency_ms_ema: float | None = None
     opened_at: float | None = None
+    _lock: Lock = field(default_factory=Lock, init=False, repr=False)
 
     @property
     def state(self) -> CircuitState:
-        if self.opened_at is None:
-            return CircuitState.CLOSED
-        if monotonic() - self.opened_at >= self.recovery_seconds:
-            return CircuitState.HALF_OPEN
-        return CircuitState.OPEN
+        with self._lock:
+            if self.opened_at is None:
+                return CircuitState.CLOSED
+            if monotonic() - self.opened_at >= self.recovery_seconds:
+                return CircuitState.HALF_OPEN
+            return CircuitState.OPEN
 
     @property
     def score(self) -> float:
-        reliability = (self.successes + 1) / (self.successes + self.failures + 2)
-        latency_penalty = min((self.latency_ms_ema or 0.0) / 60_000.0, 0.5)
-        circuit_penalty = 1.0 if self.state is CircuitState.OPEN else 0.0
-        return max(0.0, reliability - latency_penalty - circuit_penalty)
+        with self._lock:
+            reliability = (self.successes + 1) / (self.successes + self.failures + 2)
+            latency_penalty = min((self.latency_ms_ema or 0.0) / 60_000.0, 0.5)
+            circuit_penalty = 1.0 if self.state is CircuitState.OPEN else 0.0
+            return max(0.0, reliability - latency_penalty - circuit_penalty)
 
     def record_success(self, latency_ms: float) -> None:
-        self.successes += 1
-        self.consecutive_failures = 0
-        self.opened_at = None
-        alpha = 0.2
-        self.latency_ms_ema = (
-            latency_ms
-            if self.latency_ms_ema is None
-            else alpha * latency_ms + (1 - alpha) * self.latency_ms_ema
-        )
+        with self._lock:
+            self.successes += 1
+            self.consecutive_failures = 0
+            self.opened_at = None
+            alpha = 0.2
+            self.latency_ms_ema = (
+                latency_ms
+                if self.latency_ms_ema is None
+                else alpha * latency_ms + (1 - alpha) * self.latency_ms_ema
+            )
 
     def record_failure(self) -> None:
-        self.failures += 1
-        self.consecutive_failures += 1
-        if self.consecutive_failures >= self.failure_threshold:
-            self.opened_at = monotonic()
+        with self._lock:
+            self.failures += 1
+            self.consecutive_failures += 1
+            if self.consecutive_failures >= self.failure_threshold:
+                self.opened_at = monotonic()
 
 
 @dataclass

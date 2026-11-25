@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 import json
 import logging
+import os
+from dataclasses import asdict, dataclass, field
 from threading import RLock
 from typing import Callable, Mapping
 from uuid import uuid4
@@ -65,6 +66,7 @@ class TokenLedger:
 
     budget: TokenBudget = field(default_factory=TokenBudget)
     entries: list[Usage] = field(default_factory=list)
+    usage_events: list[dict[str, Any]] = field(default_factory=list)
     _reservations: dict[str, TokenReservation] = field(default_factory=dict, init=False)
     _lock: RLock = field(default_factory=RLock, init=False, repr=False)
 
@@ -261,4 +263,71 @@ class TokenLedger:
                 "totals": self.totals().to_dict(),
                 "reserved": self.totals(include_reserved=True).to_dict(),
                 "entries": [entry.to_dict() for entry in self.entries],
+                "usage_events": self.usage_events,
             }
+
+    def save(self, path: str | os.PathLike[str]) -> None:
+        """Persist the ledger state to a JSON file.
+
+        This enables budget survival across process restarts (CORE-10).
+        The file format is JSON with a ``"version"`` field for forward
+        compatibility.  Calls to :meth:`load` from a newer version will
+        raise ``ValueError``.
+        """
+        data = self.to_dict()
+        data["version"] = 1
+        # Ensure parent directory exists
+        p = os.fspath(path)
+        os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+    @classmethod
+    def load(cls, path: str | os.PathLike[str]) -> "TokenLedger":
+        """Load a persisted ledger state from a JSON file.
+
+        The ledger is initialised with the saved budget, entries, and
+        reservations; any missing fields default to empty/zero state.
+        """
+        p = os.fspath(path)
+        if not os.path.isfile(p):
+            return cls()
+        with open(p, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        version = data.pop("version", 0)
+        if version > 1:
+            raise ValueError(
+                f"Unsupported ledger version {version}; "
+                "the ledger format has changed."
+            )
+        ledger = cls()
+        # Restore budget
+        budget_data = data.pop("budget", {})
+        if budget_data:
+            # Reconstruct TokenBudget from dict; fields with defaults are
+            # automatically populated by the dataclass constructor.
+            from .tokens import TokenBudget
+            ledger.budget = TokenBudget(**budget_data)
+        # Restore entries (list of Usage)
+        entries_data = data.pop("entries", [])
+        for entry_dict in entries_data:
+            from .tokens import Usage
+            ledger.entries.append(Usage(**entry_dict))
+        # Restore reservations (dict of TokenReservation)
+        reservations_data = data.pop("_reservations", {})
+        for rid, res_dict in reservations_data.items():
+            from .tokens import TokenReservation
+            ledger._reservations[rid] = TokenReservation(**res_dict)
+        # Restore usage events
+        usage_events_data = data.pop("usage_events", [])
+        ledger.usage_events = usage_events_data
+        return ledger
+
+    def record_usage_event(self, event: dict[str, Any]) -> None:
+        """Record a usage event (token count, cost, latency) for observability.
+
+        Events are appended to the internal list and persisted via
+        :meth:`save`/ :meth:`load` for cross-process observability.
+        """
+        with self._lock:
+            self.usage_events.append(event)

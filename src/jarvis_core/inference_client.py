@@ -62,6 +62,7 @@ class InferenceConfig:
     queue_retry_backoff_seconds: float = 0.5
     retry_sleep_cap_seconds: float = MAX_RETRY_SLEEP_SECONDS
     retry_deadline_seconds: float = DEFAULT_RETRY_DEADLINE_SECONDS
+    cancel_token: str | None = None
 
     def __post_init__(self) -> None:
         normalized = self.base_url.strip().rstrip("/")
@@ -204,7 +205,23 @@ class InferenceClient:
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
         self._merge_options(payload, options)
-        return self._request("POST", "chat/completions", payload, timeout=timeout)
+        result = self._request("POST", "chat/completions", payload, timeout=timeout)
+        # Record usage event for observability
+        usage = result.get("usage")
+        if usage:
+            from .tokens import TokenLedger
+            ledger: TokenLedger | None = getattr(self, "_ledger", None)
+            if ledger is not None:
+                ledger.record_usage_event({
+                    "kind": "model_completion",
+                    "model": model,
+                    "input_tokens": usage.get("prompt_tokens", 0)
+                    + usage.get("cached_input_tokens", 0),
+                    "output_tokens": usage.get("completion_tokens", 0),
+                    "total_tokens": usage.get("total_tokens", 0),
+                    "retryable": result.get("retryable", False),
+                })
+        return result
 
     def stream(
         self,
@@ -264,12 +281,17 @@ class InferenceClient:
             raise InferenceClientError("Inference queue retry budget exhausted")
         with response:
             total_bytes = 0
+            stream_deadline = time.monotonic() + (timeout or self.config.timeout)
             try:
                 for line in response:
                     total_bytes += len(line)
                     if total_bytes > MAX_RESPONSE_BYTES:
                         raise InferenceClientError(
                             "Inference stream exceeded the response size limit"
+                        )
+                    if time.monotonic() > stream_deadline:
+                        raise InferenceClientError(
+                            "Inference stream exceeded the wall-clock deadline"
                         )
                     if not line.startswith(b"data:"):
                         continue
@@ -371,8 +393,16 @@ class InferenceClient:
                 detail = exc.read(MAX_ERROR_BYTES).decode(errors="replace")
                 error = self._http_error(exc, detail)
                 delay = self._queue_retry_delay(error)
+                # Retry if: (a) error_code is a queue rejection code, OR
+                # (b) the error is marked retryable (e.g. connection failures
+                # that Core classifies as retryable but have non-QUEUE codes).
+                # In both cases we still respect the max-attempt and deadline limits.
+                retry_now = (
+                    error.error_code in QUEUE_REJECTION_CODES
+                    or error.retryable
+                )
                 if (
-                    error.error_code not in QUEUE_REJECTION_CODES
+                    not retry_now
                     or attempt >= self.config.queue_retries
                     or time.monotonic() + delay > retry_deadline
                 ):
