@@ -307,16 +307,19 @@ class TokenLedger:
             # Reconstruct TokenBudget from dict; fields with defaults are
             # automatically populated by the dataclass constructor.
             from .tokens import TokenBudget
+
             ledger.budget = TokenBudget(**budget_data)
         # Restore entries (list of Usage)
         entries_data = data.pop("entries", [])
         for entry_dict in entries_data:
             from .tokens import Usage
+
             ledger.entries.append(Usage(**entry_dict))
         # Restore reservations (dict of TokenReservation)
         reservations_data = data.pop("_reservations", {})
         for rid, res_dict in reservations_data.items():
             from .tokens import TokenReservation
+
             ledger._reservations[rid] = TokenReservation(**res_dict)
         # Restore usage events
         usage_events_data = data.pop("usage_events", [])

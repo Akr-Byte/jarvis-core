@@ -210,17 +210,20 @@ class InferenceClient:
         usage = result.get("usage")
         if usage:
             from .tokens import TokenLedger
+
             ledger: TokenLedger | None = getattr(self, "_ledger", None)
             if ledger is not None:
-                ledger.record_usage_event({
-                    "kind": "model_completion",
-                    "model": model,
-                    "input_tokens": usage.get("prompt_tokens", 0)
-                    + usage.get("cached_input_tokens", 0),
-                    "output_tokens": usage.get("completion_tokens", 0),
-                    "total_tokens": usage.get("total_tokens", 0),
-                    "retryable": result.get("retryable", False),
-                })
+                ledger.record_usage_event(
+                    {
+                        "kind": "model_completion",
+                        "model": model,
+                        "input_tokens": usage.get("prompt_tokens", 0)
+                        + usage.get("cached_input_tokens", 0),
+                        "output_tokens": usage.get("completion_tokens", 0),
+                        "total_tokens": usage.get("total_tokens", 0),
+                        "retryable": result.get("retryable", False),
+                    }
+                )
         return result
 
     def stream(
@@ -397,10 +400,7 @@ class InferenceClient:
                 # (b) the error is marked retryable (e.g. connection failures
                 # that Core classifies as retryable but have non-QUEUE codes).
                 # In both cases we still respect the max-attempt and deadline limits.
-                retry_now = (
-                    error.error_code in QUEUE_REJECTION_CODES
-                    or error.retryable
-                )
+                retry_now = error.error_code in QUEUE_REJECTION_CODES or error.retryable
                 if (
                     not retry_now
                     or attempt >= self.config.queue_retries
