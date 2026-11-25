@@ -20,6 +20,25 @@
   string (emitted by several local OpenAI-compatible runtimes) as an empty
   argument mapping instead of raising `TypeError` and discarding the tool
   call.
+
+## 0.18.2
+
+### Fixed
+
+- **CORE-7**: Streaming wall-clock deadline — added `stream_deadline` check in
+  `stream()` loop, raises `InferenceClientError` if stream exceeds configured
+  timeout, preventing infinite hangs on slow-drip streams.
+- **CORE-8**: retryable flag actuation — modified retry condition in `_request()`
+  to also retry when `error.retryable=True` (not just when
+  `error.error_code in QUEUE_REJECTION_CODES`), so connection failures labeled
+  retryable are actually retried.
+- **CORE-10**: Ledger persistence — added `save()` and `load()` class methods to
+  `TokenLedger` for JSON-based persistence of budget, entries, reservations,
+  and usage events across process restarts.
+- **ProviderHealth thread safety** — added `threading.Lock` to
+  `ProviderHealth` for thread-safe state access; all properties (`state`,
+  `score`) and methods (`record_success`, `record_failure`) now acquire the
+  lock; fixed circuit state property to be lock-protected.
 - **CORE-18**: `IdempotencyLedger` is now thread-safe: the completed/in-flight
   check-then-add runs under a re-entrant lock, so two threads racing on the
   same key execute the side effect exactly once. `ProviderPool` mutations are
