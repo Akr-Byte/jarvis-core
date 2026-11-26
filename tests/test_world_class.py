@@ -145,6 +145,29 @@ def test_idempotency_ledger_is_thread_safe_per_key():
     assert results == ["result", "result"]
 
 
+def test_provider_health_score_is_deadlock_free():
+    """Reading ``score`` must not deadlock on its own lock (0.18.2 regression).
+
+    ``score`` reads ``state`` while holding the health lock. With a plain
+    ``threading.Lock`` that re-entry blocked forever, so any ``ProviderPool``
+    call hung the whole suite. Run it in a thread so a regression fails the
+    test instead of hanging CI.
+    """
+    import threading
+
+    health = ProviderHealth("health", failure_threshold=1)
+    health.record_failure()
+    assert health.state is CircuitState.OPEN
+
+    scores: list[float] = []
+    worker = threading.Thread(target=lambda: scores.append(health.score))
+    worker.start()
+    worker.join(timeout=5)
+
+    assert not worker.is_alive(), "ProviderHealth.score deadlocked on its own lock"
+    assert scores and 0.0 <= scores[0] <= 1.0
+
+
 def test_provider_pool_propagates_keyboard_interrupt():
     """Process-control exceptions must not be masked as provider failures (0.18.1)."""
     pool = ProviderPool(["only"], name=str)

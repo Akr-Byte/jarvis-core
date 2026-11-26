@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import threading
-
 from dataclasses import dataclass, field
 from enum import Enum
-from threading import RLock, Lock
+from threading import RLock
 from time import monotonic
 from typing import Callable, Generic, TypeVar
 
@@ -29,7 +27,7 @@ class ProviderHealth:
     consecutive_failures: int = 0
     latency_ms_ema: float | None = None
     opened_at: float | None = None
-    _lock: Lock = field(default_factory=Lock, init=False, repr=False)
+    _lock: RLock = field(default_factory=RLock, init=False, repr=False)
 
     @property
     def state(self) -> CircuitState:

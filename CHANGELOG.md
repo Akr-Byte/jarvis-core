@@ -35,10 +35,13 @@
 - **CORE-10**: Ledger persistence — added `save()` and `load()` class methods to
   `TokenLedger` for JSON-based persistence of budget, entries, reservations,
   and usage events across process restarts.
-- **ProviderHealth thread safety** — added `threading.Lock` to
-  `ProviderHealth` for thread-safe state access; all properties (`state`,
-  `score`) and methods (`record_success`, `record_failure`) now acquire the
-  lock; fixed circuit state property to be lock-protected.
+- **ProviderHealth thread safety** — `ProviderHealth` now guards its counters
+  and circuit state with a **re-entrant** lock; all properties (`state`,
+  `score`) and methods (`record_success`, `record_failure`) are lock-protected.
+  `score` reads `state` while holding the lock, so a plain `threading.Lock`
+  self-deadlocked and hung every `ProviderPool.call()` — the full test suite
+  (and the 85%-coverage CI gate) stalled forever. The lock is `RLock`, and a
+  regression test asserts `score` completes.
 - **CORE-18**: `IdempotencyLedger` is now thread-safe: the completed/in-flight
   check-then-add runs under a re-entrant lock, so two threads racing on the
   same key execute the side effect exactly once. `ProviderPool` mutations are
