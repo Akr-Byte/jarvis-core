@@ -8,7 +8,6 @@ on:
 jobs:
   python:
     runs-on: ubuntu-latest
-    retention-time: '7 days
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -33,3 +32,4 @@ jobs:
           name: certification-evidence-${{ github.sha }}
           path: certification-evidence.json
           if-no-files-found: error
+          retention-days: 7
