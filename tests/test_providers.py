@@ -102,3 +102,16 @@ def test_normalize_tool_call_rejects_non_mapping_json_string() -> None:
         normalize_tool_call(
             {"id": "call-4", "function": {"name": "search", "arguments": "[1, 2]"}}
         )
+
+
+def test_tool_call_arguments_json_null_is_treated_as_empty():
+    """Local OpenAI-compatible runtimes emit arguments="null" (0.18.1)."""
+    call = normalize_tool_call(
+        {
+            "id": "call-1",
+            "type": "function",
+            "function": {"name": "read_file", "arguments": "null"},
+        }
+    )
+    assert call.name == "read_file"
+    assert dict(call.arguments) == {}

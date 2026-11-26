@@ -56,12 +56,14 @@ Core centralizes the parts of an agent runtime that should be shared rather than
 
 ## Install
 
-Python 3.10+ is required. The current release is **0.18.0**, which adds persistent HTTP(S) connections
-via `InferenceClient` keepalive support, and hardens ledger reservation cleanup, bounds retry sleeps with
-a total deadline, and decodes OpenAI JSON-string tool-call arguments.
+Python 3.10+ is required. The current release is **0.18.2**, which fixes
+error-envelope parsing in `InferenceClient` (the OpenAI `{"error": {...}}` shape now
+drives queue-admission retries), sanitizes provider usage reporting so a completed call
+is never discarded by post-call accounting, and hardens the thread safety of the
+resilience primitives.
 
 ```bash
-python -m pip install "jarvis-agent-core==0.18.0"
+python -m pip install "jarvis-agent-core==0.18.2"
 ```
 
 For development:

@@ -107,6 +107,11 @@ def normalize_tool_call(
             decoded: Any = json.loads(arguments) if arguments else {}
         except json.JSONDecodeError as exc:
             raise TypeError("tool call arguments string is not valid JSON") from exc
+        # Local OpenAI-compatible runtimes legitimately emit the JSON literal
+        # "null" for a call with no arguments; treat it as an empty mapping
+        # instead of discarding the provider's tool call (0.18.1).
+        if decoded is None:
+            decoded = {}
         arguments = decoded
     if not isinstance(arguments, Mapping):
         raise TypeError("tool call arguments must be a mapping")
