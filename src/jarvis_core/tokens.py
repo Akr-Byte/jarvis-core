@@ -297,8 +297,7 @@ class TokenLedger:
         version = data.pop("version", 0)
         if version > 1:
             raise ValueError(
-                f"Unsupported ledger version {version}; "
-                "the ledger format has changed."
+                f"Unsupported ledger version {version}; the ledger format has changed."
             )
         ledger = cls()
         # Restore budget
