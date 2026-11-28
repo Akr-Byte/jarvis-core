@@ -248,16 +248,18 @@ def parse_protocol_header(value: str | None, *, header: str) -> int | None:
 
 def extract_capabilities(payload: Mapping[str, Any]) -> dict[str, Any]:
     """Normalize capabilities payloads across agent/inference shapes."""
-    protocol = (
-        payload.get("protocol") if isinstance(payload.get("protocol"), Mapping) else {}
+    raw_protocol = payload.get("protocol")
+    protocol: Mapping[str, Any] = (
+        raw_protocol if isinstance(raw_protocol, Mapping) else {}
     )
-    features = payload.get("features")
-    if not isinstance(features, list):
-        # nested model capabilities map
-        if isinstance(payload.get("capabilities"), list):
-            features = payload.get("capabilities")
-        else:
-            features = []
+    raw_features = payload.get("features")
+    raw_caps = payload.get("capabilities")
+    if isinstance(raw_features, list):
+        features: list[Any] = raw_features
+    elif isinstance(raw_caps, list):
+        features = raw_caps
+    else:
+        features = []
     min_v = protocol.get("min_cli", protocol.get("min_client", protocol.get("minimum")))
     max_v = protocol.get("max_cli", protocol.get("max_client", protocol.get("maximum")))
     cur_v = protocol.get("current", protocol.get("version"))
