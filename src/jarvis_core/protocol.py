@@ -105,7 +105,11 @@ class Capability:
         return set(required).issubset(set(self.features))
 
     def to_dict(self) -> dict[str, Any]:
-        return {"name": self.name, "version": self.version, "features": list(self.features)}
+        return {
+            "name": self.name,
+            "version": self.version,
+            "features": list(self.features),
+        }
 
 
 @dataclass(frozen=True)
@@ -130,7 +134,9 @@ class Usage:
         payload: dict[str, Any] = {
             "input_tokens": int(self.input_tokens),
             "output_tokens": int(self.output_tokens),
-            "total_tokens": int(self.total_tokens or (self.input_tokens + self.output_tokens)),
+            "total_tokens": int(
+                self.total_tokens or (self.input_tokens + self.output_tokens)
+            ),
             "cached_input_tokens": int(self.cached_input_tokens),
             "estimated": bool(self.estimated),
             "currency": self.currency,
@@ -145,8 +151,12 @@ class Usage:
     def from_mapping(cls, value: Mapping[str, Any] | None) -> "Usage | None":
         if not isinstance(value, Mapping):
             return None
-        input_tokens = int(value.get("input_tokens", value.get("prompt_tokens", 0)) or 0)
-        output_tokens = int(value.get("output_tokens", value.get("completion_tokens", 0)) or 0)
+        input_tokens = int(
+            value.get("input_tokens", value.get("prompt_tokens", 0)) or 0
+        )
+        output_tokens = int(
+            value.get("output_tokens", value.get("completion_tokens", 0)) or 0
+        )
         total = int(value.get("total_tokens", input_tokens + output_tokens) or 0)
         cost = value.get("cost_usd")
         return cls(
@@ -238,7 +248,9 @@ def parse_protocol_header(value: str | None, *, header: str) -> int | None:
 
 def extract_capabilities(payload: Mapping[str, Any]) -> dict[str, Any]:
     """Normalize capabilities payloads across agent/inference shapes."""
-    protocol = payload.get("protocol") if isinstance(payload.get("protocol"), Mapping) else {}
+    protocol = (
+        payload.get("protocol") if isinstance(payload.get("protocol"), Mapping) else {}
+    )
     features = payload.get("features")
     if not isinstance(features, list):
         # nested model capabilities map

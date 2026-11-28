@@ -40,8 +40,14 @@ def test_parse_protocol_header():
 
 
 def test_extract_capabilities_agent_and_inference_shapes():
-    agent = {"protocol": {"current": 1, "min_cli": 1, "max_cli": 1}, "features": ["durable_events"]}
-    inf = {"protocol": {"current": 1, "min_client": 1, "max_client": 1}, "features": ["queue"]}
+    agent = {
+        "protocol": {"current": 1, "min_cli": 1, "max_cli": 1},
+        "features": ["durable_events"],
+    }
+    inf = {
+        "protocol": {"current": 1, "min_client": 1, "max_client": 1},
+        "features": ["queue"],
+    }
     assert extract_capabilities(agent)["minimum"] == 1
     assert extract_capabilities(agent)["maximum"] == 1
     assert check_feature(agent, "durable_events")
@@ -49,7 +55,9 @@ def test_extract_capabilities_agent_and_inference_shapes():
 
 
 def test_usage_normalization_and_aliases():
-    usage = Usage.from_mapping({"prompt_tokens": 10, "completion_tokens": 5, "cached_input_tokens": 2})
+    usage = Usage.from_mapping(
+        {"prompt_tokens": 10, "completion_tokens": 5, "cached_input_tokens": 2}
+    )
     assert usage is not None
     payload = usage.to_dict()
     assert payload["input_tokens"] == 10
@@ -74,7 +82,9 @@ def test_event_and_error_envelope_shapes():
     assert event["tenant"]["tenant_id"] == "t1"
     assert event["correlation_id"] == "corr1"
 
-    err = ProtocolError(code="INVALID_REQUEST", message="bad", request_id="req1", correlation_id="corr1").to_dict()
+    err = ProtocolError(
+        code="INVALID_REQUEST", message="bad", request_id="req1", correlation_id="corr1"
+    ).to_dict()
     assert err["error"]["code"] == "INVALID_REQUEST"
     assert err["error"]["request_id"] == "req1"
     assert err["error"]["correlation_id"] == "corr1"
