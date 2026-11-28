@@ -46,3 +46,16 @@ Jarvis and AI Stack may both consume the published Core package, but neither app
 ## Required validation
 
 Before opening or updating a PR, run the repository validation commands in `CONTRIBUTING.md`, including formatting, linting, type checks, tests, build, and package metadata validation.
+
+
+## Local pre-commit/pre-push gate (required)
+
+Before any commit or push, run local checks and do not push if they fail:
+
+- `black --check src tests`
+- `ruff check src tests --select E9,F63,F7,F82`
+- `mypy src`
+- `pytest -q --cov=jarvis_core --cov-fail-under=85`
+- `python scripts/check_release_consistency.py` (if present)
+
+Also run any repo-specific CI parity checks affected by your change. CI must be expected green before push.

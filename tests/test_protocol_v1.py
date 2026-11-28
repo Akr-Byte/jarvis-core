@@ -14,7 +14,7 @@ from jarvis_core import (
     EventEnvelope,
     ProtocolError,
     TenantContext,
-    Usage,
+    ProtocolUsage,
     check_feature,
     extract_capabilities,
     negotiate,
@@ -55,7 +55,7 @@ def test_extract_capabilities_agent_and_inference_shapes():
 
 
 def test_usage_normalization_and_aliases():
-    usage = Usage.from_mapping(
+    usage = ProtocolUsage.from_mapping(
         {"prompt_tokens": 10, "completion_tokens": 5, "cached_input_tokens": 2}
     )
     assert usage is not None
