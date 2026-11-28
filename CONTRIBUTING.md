@@ -23,7 +23,7 @@ python -m pytest
 Before submitting a pull request, run:
 
 ```bash
-ruff format --check src tests
+black --check src tests
 ruff check src tests --select E9,F63,F7,F82
 pytest -q --cov=jarvis_core --cov-report=term-missing --cov-fail-under=85
 python -m build
@@ -47,7 +47,7 @@ security vulnerabilities through the private process in SECURITY.md.
 Do not commit or push unless local checks pass. At minimum run:
 
 ```bash
-ruff format --check src tests
+black --check src tests
 ruff check src tests --select E9,F63,F7,F82
 mypy src
 pytest -q --cov=jarvis_core --cov-report=term-missing --cov-fail-under=85
