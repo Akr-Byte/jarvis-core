@@ -52,7 +52,7 @@ Before opening or updating a PR, run the repository validation commands in `CONT
 
 Before any commit or push, run local checks and do not push if they fail:
 
-- `black --check src tests`
+- `ruff format --check src tests`
 - `ruff check src tests --select E9,F63,F7,F82`
 - `mypy src`
 - `pytest -q --cov=jarvis_core --cov-fail-under=85`
