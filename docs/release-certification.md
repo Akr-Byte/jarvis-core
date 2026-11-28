@@ -1,6 +1,6 @@
 # Release certification
 
-This branch prepares **Jarvis Core 0.17.2**. Publish the package only after the required release gates pass; downstream consumers should pin 0.17.2 only after it is available on PyPI and should rerun their integration gates.
+This branch prepares **Jarvis Core 0.19.0**. Publish the package only after the required release gates pass; downstream consumers should pin 0.19.0 only after it is available on PyPI and should rerun their integration gates.
 
 ## Contract gates
 

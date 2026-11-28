@@ -56,14 +56,12 @@ Core centralizes the parts of an agent runtime that should be shared rather than
 
 ## Install
 
-Python 3.10+ is required. The current release is **0.18.2**, which fixes
-error-envelope parsing in `InferenceClient` (the OpenAI `{"error": {...}}` shape now
-drives queue-admission retries), sanitizes provider usage reporting so a completed call
-is never discarded by post-call accounting, and hardens the thread safety of the
-resilience primitives.
+Python 3.10+ is required. The current release is **0.19.0**, which adds shared service
+primitives for environment parsing, API keys, redaction, OpenAI-compatible error
+envelopes and bounded HTTP headers so sibling services inherit one implementation.
 
 ```bash
-python -m pip install "jarvis-agent-core==0.18.2"
+python -m pip install "jarvis-agent-core==0.19.0"
 ```
 
 For development:
@@ -118,6 +116,31 @@ Core retries only explicit pre-admission `QUEUE_TIMEOUT` / `QUEUE_FULL` rejectio
 are never replayed. Structured SSE error frames are surfaced as `InferenceClientError` instead of
 being returned as successful model events. `INFERENCE_QUEUE_RETRIES` defaults to `1` (maximum `3`), and
 `INFERENCE_QUEUE_RETRY_BACKOFF_SECONDS` defaults to `0.5`.
+
+## Shared service primitives
+
+Sibling services inherit small, dependency-free primitives from Core rather than implementing
+their own copies:
+
+```python
+from jarvis_core import (
+    env_flag,
+    error_payload,
+    generate_api_key,
+    hash_api_key,
+    redact_text,
+    safe_request_id,
+)
+
+api_key = generate_api_key("forge_")
+stored_hash = hash_api_key(api_key)
+safe_log = redact_text(f"api_key={api_key}")
+body = error_payload("QUEUE_FULL", "queue is full", retryable=True, request_id="req-1")
+```
+
+These helpers intentionally stop at the library boundary. Applications still own credential
+storage, API-key lookup, database tenancy, queue durability and actual security enforcement.
+Core only standardizes the reusable algorithms and wire shapes.
 
 ## Token-efficient runtime
 
