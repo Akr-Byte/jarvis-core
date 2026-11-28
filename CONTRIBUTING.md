@@ -23,7 +23,7 @@ python -m pytest
 Before submitting a pull request, run:
 
 ```bash
-black --check src tests
+ruff format --check src tests
 ruff check src tests --select E9,F63,F7,F82
 pytest -q --cov=jarvis_core --cov-report=term-missing --cov-fail-under=85
 python -m build
@@ -40,3 +40,20 @@ python -m twine check dist/*
 
 By participating, you agree to follow the Code of Conduct. Please report
 security vulnerabilities through the private process in SECURITY.md.
+
+
+## Required local gate before commit/push
+
+Do not commit or push unless local checks pass. At minimum run:
+
+```bash
+ruff format --check src tests
+ruff check src tests --select E9,F63,F7,F82
+mypy src
+pytest -q --cov=jarvis_core --cov-report=term-missing --cov-fail-under=85
+python scripts/check_release_consistency.py
+python -m build
+python -m twine check dist/*
+```
+
+If CI has additional jobs relevant to your change, run equivalent local checks first.

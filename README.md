@@ -56,12 +56,12 @@ Core centralizes the parts of an agent runtime that should be shared rather than
 
 ## Install
 
-Python 3.10+ is required. The current release is **0.19.0**, which adds shared service
+Python 3.10+ is required. The current release is **0.20.0**, which adds shared service
 primitives for environment parsing, API keys, redaction, OpenAI-compatible error
 envelopes and bounded HTTP headers so sibling services inherit one implementation.
 
 ```bash
-python -m pip install "jarvis-agent-core==0.19.0"
+python -m pip install "jarvis-agent-core==0.20.0"
 ```
 
 For development:

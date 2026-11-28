@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.20.0
+
+### Added
+
+- **Protocol v1**: canonical, transport-neutral Agent/Inference protocol v1 in
+  `jarvis_core.protocol` with version negotiation, header constants, normalized
+  `Usage`, `EventEnvelope`, `ProtocolError`, `TenantContext`, and capability
+  extraction helpers.
+- **Contracts export**: exported protocol constants/helpers from `jarvis_core`
+  public API and kept `contracts` backward-compatible.
+- **Contract tests**: added `tests/test_protocol_v1.py` covering negotiation,
+  header parsing, capability extraction, usage normalization, and envelope
+  shapes.
+
 ## 0.19.0
 
 ### Added

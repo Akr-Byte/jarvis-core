@@ -1,7 +1,10 @@
 """Protocol and capability contracts shared across Jarvis services.
 
-This module is transport-neutral: it defines compatibility semantics without
-depending on HTTP, FastAPI, Ollama, or any particular deployment.
+Transport-neutral: defines compatibility semantics without depending on HTTP,
+FastAPI, or deployment-specific frameworks.
+
+Canonical protocol v1 shapes live in ``jarvis_core.protocol``; this module keeps
+backward-compatible helpers used by existing consumers.
 """
 
 from __future__ import annotations
@@ -9,23 +12,23 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Mapping
 
-AGENT_PROTOCOL_VERSION = 1
-INFERENCE_PROTOCOL_VERSION = 1
-EVENT_SCHEMA_VERSION = 1
+from .protocol import (  # noqa: F401
+    AGENT_PROTOCOL_VERSION,
+    EVENT_SCHEMA_VERSION,
+    INFERENCE_PROTOCOL_VERSION,
+    ProtocolRange,
+)
 
-
-@dataclass(frozen=True)
-class ProtocolRange:
-    """A protocol version range accepted by a component."""
-
-    minimum: int
-    maximum: int
-
-    def supports(self, version: int) -> bool:
-        return self.minimum <= version <= self.maximum
-
-    def overlaps(self, other: "ProtocolRange") -> bool:
-        return max(self.minimum, other.minimum) <= min(self.maximum, other.maximum)
+# Re-export for compatibility
+__all__ = [
+    "AGENT_PROTOCOL_VERSION",
+    "EVENT_SCHEMA_VERSION",
+    "INFERENCE_PROTOCOL_VERSION",
+    "CapabilityDescriptor",
+    "ProtocolRange",
+    "compatible",
+    "require_features",
+]
 
 
 @dataclass(frozen=True)
@@ -46,25 +49,24 @@ def compatible(
     *,
     version: int | None = None,
 ) -> bool:
-    """Return whether two protocol ranges have at least one compatible version."""
-
+    """Return whether two protocol ranges can interoperate."""
     if version is not None:
         return local.supports(version) and remote.supports(version)
-    return max(local.minimum, remote.minimum) <= min(local.maximum, remote.maximum)
+    return local.overlaps(remote)
 
 
 def require_features(
     capabilities: Mapping[str, object],
     required: Iterable[str],
 ) -> None:
-    """Raise ValueError when advertised capabilities do not cover requirements."""
-
-    raw_features = capabilities.get("features", ())
-    advertised = (
-        {str(item) for item in raw_features}
-        if isinstance(raw_features, (list, tuple, set, frozenset))
-        else set()
-    )
-    missing = sorted(set(required) - advertised)
+    """Raise ValueError when required capabilities are missing."""
+    raw = capabilities.get("features", [])
+    if isinstance(raw, str):
+        features = {raw}
+    elif isinstance(raw, Iterable):
+        features = {str(item) for item in raw}
+    else:
+        features = set()
+    missing = [feature for feature in required if feature not in features]
     if missing:
-        raise ValueError("Missing required capabilities: " + ", ".join(missing))
+        raise ValueError(f"missing capabilities: {', '.join(sorted(missing))}")

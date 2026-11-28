@@ -1,5 +1,7 @@
 """Shared, provider-neutral agent runtime contracts and primitives."""
 
+__version__ = "0.20.0"
+
 from .env import env_csv, env_flag, env_float, env_int, env_list, env_text
 from .error_envelope import (
     RETRY_AFTER_SECONDS,
@@ -174,6 +176,34 @@ from .sandbox import (
 from .sandbox_policy import SandboxExecutor, SandboxRequirements
 
 __all__ = [
+    "AGENT_PROTOCOL",
+    "AGENT_PROTOCOL_HEADER",
+    "AGENT_PROTOCOL_VERSION",
+    "CORRELATION_ID_HEADER",
+    "EVENT_SCHEMA_VERSION",
+    "IDEMPOTENCY_KEY_HEADER",
+    "INFERENCE_PROTOCOL",
+    "INFERENCE_PROTOCOL_HEADER",
+    "INFERENCE_PROTOCOL_VERSION",
+    "PROJECT_ID_HEADER",
+    "REQUEST_ID_HEADER",
+    "SERVICE_ID_HEADER",
+    "TENANT_ID_HEADER",
+    "ProtocolCapability",
+    "CapabilityDescriptor",
+    "EventEnvelope",
+    "ProtocolError",
+    "ProtocolKind",
+    "ProtocolNegotiation",
+    "ProtocolRange",
+    "TenantContext",
+    "ProtocolUsage",
+    "check_feature",
+    "compatible",
+    "extract_capabilities",
+    "negotiate",
+    "parse_protocol_header",
+    "require_features",
     "CapabilityRegistry",
     "ModelCapabilities",
     "ModelProfile",
@@ -365,6 +395,31 @@ from .contracts import (
     AGENT_PROTOCOL_VERSION,
     EVENT_SCHEMA_VERSION,
     INFERENCE_PROTOCOL_VERSION,
+    CapabilityDescriptor,
     ProtocolRange,
+    compatible,
     require_features,
+)
+from .protocol import (
+    AGENT_PROTOCOL,
+    AGENT_PROTOCOL_HEADER,
+    CORRELATION_ID_HEADER,
+    IDEMPOTENCY_KEY_HEADER,
+    INFERENCE_PROTOCOL,
+    INFERENCE_PROTOCOL_HEADER,
+    PROJECT_ID_HEADER,
+    REQUEST_ID_HEADER,
+    SERVICE_ID_HEADER,
+    TENANT_ID_HEADER,
+    Capability as ProtocolCapability,
+    EventEnvelope,
+    ProtocolError,
+    ProtocolKind,
+    ProtocolNegotiation,
+    TenantContext,
+    Usage as ProtocolUsage,
+    check_feature,
+    extract_capabilities,
+    negotiate,
+    parse_protocol_header,
 )
