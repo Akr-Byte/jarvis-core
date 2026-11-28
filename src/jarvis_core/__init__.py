@@ -1,5 +1,29 @@
 """Shared, provider-neutral agent runtime contracts and primitives."""
 
+from .env import env_csv, env_flag, env_float, env_int, env_list, env_text
+from .error_envelope import (
+    RETRY_AFTER_SECONDS,
+    ErrorEnvelope,
+    error_payload,
+    retry_after_seconds,
+)
+from .http_headers import SAFE_REQUEST_ID_PATTERN, bearer_token, safe_request_id
+from .keys import (
+    DEFAULT_KEY_BYTES,
+    MIN_KEY_BYTES,
+    generate_api_key,
+    hash_api_key,
+    keys_equal,
+)
+from .redaction import (
+    DEFAULT_PATTERNS,
+    REDACTED,
+    REDACTED_KEY,
+    SECRET_KEY_NAMES,
+    redact_strings,
+    redact_text,
+    redact_value,
+)
 from .agents import (
     AgentBackend,
     AgentResult,
@@ -181,6 +205,31 @@ __all__ = [
     "classify_failure",
     "normalize_search_results",
     "redact",
+    "redact_strings",
+    "redact_text",
+    "redact_value",
+    "REDACTED",
+    "REDACTED_KEY",
+    "SECRET_KEY_NAMES",
+    "DEFAULT_PATTERNS",
+    "env_csv",
+    "env_flag",
+    "env_float",
+    "env_int",
+    "env_list",
+    "env_text",
+    "ErrorEnvelope",
+    "RETRY_AFTER_SECONDS",
+    "error_payload",
+    "retry_after_seconds",
+    "bearer_token",
+    "safe_request_id",
+    "SAFE_REQUEST_ID_PATTERN",
+    "generate_api_key",
+    "hash_api_key",
+    "keys_equal",
+    "DEFAULT_KEY_BYTES",
+    "MIN_KEY_BYTES",
     "run_evals",
     "score_output",
     "AgentBackend",

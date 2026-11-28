@@ -8,22 +8,14 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
-_SECRET_KEYS = {"api_key", "authorization", "cookie", "password", "secret", "token"}
+from .redaction import SECRET_KEY_NAMES, redact_value
+
+_SECRET_KEYS = SECRET_KEY_NAMES
 
 
 def redact(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {
-            str(key): (
-                "[REDACTED]" if str(key).casefold() in _SECRET_KEYS else redact(item)
-            )
-            for key, item in value.items()
-        }
-    if isinstance(value, list):
-        return [redact(item) for item in value]
-    if isinstance(value, tuple):
-        return tuple(redact(item) for item in value)
-    return value
+    """Redact a trace payload using the shared Core redaction primitives."""
+    return redact_value(value)
 
 
 @dataclass(frozen=True)

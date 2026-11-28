@@ -20,7 +20,10 @@ Core provides stable vocabulary and deterministic primitives for:
 - proof/evidence ledger types;
 - deterministic permission decisions;
 - reusable sandbox policy and host-boundary validation;
-- evaluation, tracing and review primitives.
+- evaluation, tracing and review primitives;
+- dependency-free service primitives for environment parsing, API-key
+  generation/hashing/comparison, secret redaction, error envelopes and bounded
+  HTTP headers.
 
 ## What applications must implement
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.19.0
+
+### Added
+
+- **CORE-19**: dependency-free shared service primitives: `env_*` helpers,
+  `generate_api_key`/`hash_api_key`/`keys_equal`, `redact_text`/`redact_value`,
+  `ErrorEnvelope`/`error_payload`, and `bearer_token`/`safe_request_id`. The
+  inference gateway, Forge, AI Stack and Jarvis CLI now inherit these common
+  implementations instead of duplicating them. `tracing.redact` delegates to the
+  shared redaction primitive and preserves its existing key-masking behavior.
+
 ## 0.18.1
 
 ### Fixed
